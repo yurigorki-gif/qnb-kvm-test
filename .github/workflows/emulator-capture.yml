@@ -50,13 +50,17 @@ jobs:
       - name: mitmproxy kur
         run: sudo apt-get install -y -q mitmproxy
 
-      - name: Emulator başlat (sağlam)
+      - name: Emulator başlat (AVD dahil, tek adım)
         run: |
-          export PATH=$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH
-          # KVM izin düzelt (runner user kvm grubunda değil!)
+          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/emulator:$ANDROID_HOME/platform-tools:$PATH
           sudo gpasswd -a $USER kvm || true
           sudo chmod 666 /dev/kvm || true
           ls -la /dev/kvm || echo "KVM yok"
+          rm -rf /home/runner/.android/avd/qnb* 2>/dev/null || true
+          echo no | avdmanager create avd -n qnb -k "system-images;android-33;google_apis_playstore;x86_64" -d pixel_5 --force
+          echo "=== AVD listesi ==="
+          avdmanager list avd || true
+          find /home/runner/.android -maxdepth 3 -type f | head -10
           (mitmdump --set block_global=false --set termlog_verbosity=debug -w /tmp/flows.dump > /tmp/mitm.log 2>&1 &)
           sleep 5
           emulator -accel-check || true
