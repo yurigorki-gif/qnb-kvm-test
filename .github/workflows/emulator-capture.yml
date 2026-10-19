@@ -31,8 +31,15 @@ jobs:
           unzip -q /tmp/cmd.zip -d $ANDROID_HOME/cmdline-tools
           mv $ANDROID_HOME/cmdline-tools/cmdline-tools $ANDROID_HOME/cmdline-tools/latest
           export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
-          yes | sdkmanager --licenses > /dev/null 2>&1 || true
-          sdkmanager --install "platform-tools" "emulator" "system-images;android-33;google_apis;arm64-v8a"
+          java -version
+          echo JAVA_HOME=$JAVA_HOME
+          yes | sdkmanager --licenses || true
+          echo "--- try normal ---"
+          sdkmanager --install "platform-tools" "emulator" "system-images;android-33;google_apis;arm64-v8a" || true
+          echo "--- try no_https ---"
+          sdkmanager --no_https --install "platform-tools" "emulator" "system-images;android-33;google_apis;arm64-v8a" || true
+          ls $ANDROID_HOME
+          [ -x $ANDROID_HOME/emulator/emulator ] && echo EMU_OK || echo EMU_MISSING
 
       - name: AVD oluştur
         run: |
