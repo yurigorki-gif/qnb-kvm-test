@@ -1,0 +1,13 @@
+{
+ "isProd": true,
+ "hostName": "secure-server.qnbfinansbank.com",
+ "sealContextPath": "/seal",
+ "octopusContextPath": "/octopus",
+ "trustedPublicKeyHashes": [
+  "sha256/YkTi9rnX7BFNNeTwc9fiRuwxpYiMJ3A/2X0gwkmGS/c="
+ ],
+ "userIdEncryptionKey": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAndQs9Fji2fc+FUHl5rMyUL13OxYgd98WhpdqXmL4pyPZ95yIkbYot11q7ZodOntoXbGxWG2KYMs41GHQgtpEqwLI7BfkeoFe3REJ7TW6RLFEV+1oHdwFhghdbu/gbYdm/HeG3gaIYKA0tjv9qxVYAu5Gm+HrWzTlsQpmVkKV5utr/kVuXp2V+I8FqEtolmF7vLaqbqgIkabxXeYnVaXZIUg53qunzFSheMvuS42r4S35z27VxV7vTdp+dolUtJSPfGnyP+kBDawSTX40xHUsx4fsZ7xwW6VRil2rMw8WuAdKmEZYkhfgdDiGZnnNK3R/2qa92y8XmI428uz4CEPyEQIDAQAB",
+ "userIdEncryptionKeyId": "dbcdbe74-91c1-4b39-957e-786a6456797b",
+ "userIdEncryptionKeyType": "RSA",
+ "enableReauthorizations": true
+}
