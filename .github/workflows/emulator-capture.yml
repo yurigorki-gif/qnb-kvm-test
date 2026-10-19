@@ -51,6 +51,10 @@ jobs:
       - name: Emulator başlat (sağlam)
         run: |
           export PATH=$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH
+          # KVM izin düzelt (runner user kvm grubunda değil!)
+          sudo gpasswd -a $USER kvm || true
+          sudo chmod 666 /dev/kvm || true
+          ls -la /dev/kvm || echo "KVM yok"
           (mitmdump --set block_global=false --set termlog_verbosity=debug -w /tmp/flows.dump > /tmp/mitm.log 2>&1 &)
           sleep 5
           emulator -accel-check || true
