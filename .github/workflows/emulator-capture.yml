@@ -7,20 +7,19 @@ on:
         default: "false"
 jobs:
   emulator:
-    runs-on: ubuntu-latest   # x86_64 + /dev/kvm VAR
-    timeout-minutes: 75
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
     env:
       ANDROID_HOME: /home/runner/android-sdk
     steps:
       - uses: actions/checkout@v4
 
-      - name: KVM check
+      - name: KVM durumu
         run: |
-          ls -la /dev/kvm || true
+          ls -la /dev/kvm || echo "KVM YOK"
           sudo apt-get update -q
           sudo apt-get install -y -q cpu-checker adb
           sudo kvm-ok || true
-          sudo chmod 666 /dev/kvm || true
 
       - name: SDK kurulum
         run: |
@@ -31,13 +30,13 @@ jobs:
           mv $ANDROID_HOME/cmdline-tools/cmdline-tools $ANDROID_HOME/cmdline-tools/latest
           export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
           yes | sdkmanager --licenses > /dev/null 2>&1 || true
-          # google_apis_playstore x86_64: ARM (ndk_translation) içerir → arm64 APK çalışır
           sdkmanager --install "platform-tools" "emulator" "system-images;android-33;google_apis_playstore;x86_64"
 
       - name: AVD oluştur
         run: |
           export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
           echo no | avdmanager create avd -n qnb -k "system-images;android-33;google_apis_playstore;x86_64" -d pixel_5 --force
+          cat $HOME/.android/avd/qnb.avd/config.ini || true
 
       - name: APK parçalarını birleştir
         run: |
@@ -49,25 +48,35 @@ jobs:
       - name: mitmproxy kur
         run: sudo apt-get install -y -q mitmproxy
 
-      - name: Emulator başlat
+      - name: Emulator başlat (sağlam)
         run: |
           export PATH=$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH
           (mitmdump --set block_global=false --set termlog_verbosity=debug -w /tmp/flows.dump > /tmp/mitm.log 2>&1 &)
           sleep 5
+          emulator -accel-check || true
           nohup emulator -avd qnb -no-window -no-audio -no-boot-anim \
-            -gpu swiftshader_indirect -memory 3072 -no-metrics \
+            -gpu swiftshader_indirect -memory 3072 -no-metrics -no-snapshot \
+            -camera-back none -camera-front none \
             -writable-system > /tmp/emu.log 2>&1 &
-          adb wait-for-device
-          for i in $(seq 1 60); do
-            B=$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
+          sleep 30
+          echo "=== emu.log (ilk 40 satır) ==="
+          head -40 /tmp/emu.log || true
+          echo "=== adb devices ==="
+          timeout 20 adb devices || true
+          timeout 300 adb wait-for-device || echo "wait-for-device TIMEOUT"
+          for i in $(seq 1 30); do
+            B=$(timeout 15 adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')
             echo "boot check $i: $B"
             [ "$B" = "1" ] && break
             sleep 10
           done
-          adb root
+          timeout 30 adb root || true
           sleep 3
-          adb remount || true
+          timeout 60 adb remount || true
           sleep 3
+          echo "=== emu.log (son 30) ==="
+          tail -30 /tmp/emu.log || true
+          adb devices || true
 
       - name: System CA + proxy ayarla
         run: |
@@ -76,15 +85,15 @@ jobs:
           for i in $(seq 1 20); do [ -f $CA ] && break; sleep 3; done
           HASH=$(openssl x509 -subject_hash_old -in $CA -noout)
           adb push $CA /sdcard/$HASH.0
-          adb shell "mount -o rw,remount / || mount -o rw,remount /system"
-          adb shell "cp /sdcard/$HASH.0 /system/etc/security/cacerts/$HASH.0 && chmod 644 /system/etc/security/cacerts/$HASH.0"
-          adb shell "settings put global http_proxy 10.0.2.2:8080"
+          adb shell "mount -o rw,remount / || mount -o rw,remount /system" || true
+          adb shell "cp /sdcard/$HASH.0 /system/etc/security/cacerts/$HASH.0 && chmod 644 /system/etc/security/cacerts/$HASH.0" || true
+          adb shell "settings put global http_proxy 10.0.2.2:8080" || true
           adb shell getprop ro.product.cpu.abilist || true
 
       - name: APK yükle + uygulamayı başlat
         run: |
           export PATH=$ANDROID_HOME/platform-tools:$PATH
-          adb install-multiple -r apk/app.apk apk/split.apk || true
+          timeout 400 adb install-multiple -r apk/app.apk apk/split.apk || echo "INSTALL FAIL"
           sleep 5
           adb shell pm list packages | grep -i finans || true
           adb shell monkey -p com.finansbank.mobile.cepsube -c android.intent.category.LAUNCHER 1 || true
@@ -120,3 +129,7 @@ jobs:
             ui.xml
             flows.dump
           if-no-files-found: ignore
+
+      - name: emu.log'u çıktıya yaz
+        if: always()
+        run: tail -50 /tmp/emu.log || true
