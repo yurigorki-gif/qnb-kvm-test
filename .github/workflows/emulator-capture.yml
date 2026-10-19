@@ -5,14 +5,12 @@ on:
       run_login:
         description: "Login denemesi yap (uiautomator ile)"
         default: "false"
-  push:
-    branches: [main]
-    paths: ["ci-emulator/**"]
-
 jobs:
   emulator:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 90
+    env:
+      ANDROID_HOME: /home/runner/android-sdk
     steps:
       - uses: actions/checkout@v4
 
@@ -24,22 +22,22 @@ jobs:
           sudo kvm-ok || true
           sudo chmod 666 /dev/kvm || true
 
-      - name: Java + SDK kurulum
+      - name: SDK kurulum (debug)
         run: |
-          sudo apt-get install -y -q openjdk-17-jdk-headless unzip wget
-          CMDLINE=commandlinetools-linux-11076708_latest.zip
-          wget -q https://dl.google.com/android/repository/$CMDLINE -O /tmp/cmd.zip
-          mkdir -p $HOME/android-sdk/cmdline-tools
-          unzip -q /tmp/cmd.zip -d $HOME/android-sdk/cmdline-tools
-          mv $HOME/android-sdk/cmdline-tools/cmdline-tools $HOME/android-sdk/cmdline-tools/latest
-          export ANDROID_HOME=$HOME/android-sdk
-          yes | $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager --licenses > /dev/null || true
-          $HOME/android-sdk/cmdline-tools/latest/bin/sdkmanager "platform-tools" "emulator" "system-images;android-33;google_apis;arm64-v8a" > /dev/null
+          set -x
+          sudo apt-get install -y -q openjdk-17-jdk-headless unzip
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O /tmp/cmd.zip
+          mkdir -p $ANDROID_HOME/cmdline-tools
+          unzip -q /tmp/cmd.zip -d $ANDROID_HOME/cmdline-tools
+          mv $ANDROID_HOME/cmdline-tools/cmdline-tools $ANDROID_HOME/cmdline-tools/latest
+          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          sdkmanager --install "platform-tools" "emulator" "system-images;android-33;google_apis;arm64-v8a"
 
       - name: AVD oluştur
         run: |
-          export ANDROID_HOME=$HOME/android-sdk
-          echo no | $ANDROID_HOME/cmdline-tools/latest/bin/avdmanager create avd -n qnb -k "system-images;android-33;google_apis;arm64-v8a" -d pixel_5 --force
+          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/emulator:$ANDROID_HOME/platform-tools:$PATH
+          echo no | avdmanager create avd -n qnb -k "system-images;android-33;google_apis;arm64-v8a" -d pixel_5 --force
 
       - name: APK parçalarını birleştir
         run: |
@@ -49,13 +47,12 @@ jobs:
           ls -la apk/
 
       - name: mitmproxy kur
-        run: sudo apt-get install -y -q mitmproxy || pip3 install mitmproxy
+        run: sudo apt-get install -y -q mitmproxy
 
       - name: Emulator başlat
         run: |
-          export ANDROID_HOME=$HOME/android-sdk
           export PATH=$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH
-          mkdir -p $HOME/.mitmproxy
+          mkdir -p /home/runner/.mitmproxy
           (mitmdump --set block_global=false --set termlog_verbosity=debug -w /tmp/flows.dump > /tmp/mitm.log 2>&1 &)
           sleep 5
           nohup emulator -avd qnb -no-window -no-audio -no-boot-anim \
@@ -75,20 +72,18 @@ jobs:
 
       - name: System CA + proxy ayarla
         run: |
-          export PATH=$HOME/android-sdk/platform-tools:$PATH
-          # mitmproxy CA'yı Android system formatına çevir
-          CA=$HOME/.mitmproxy/mitmproxy-ca-cert.pem
-          for i in $(seq 1 10); do [ -f $CA ] && break; sleep 3; done
+          export PATH=$ANDROID_HOME/platform-tools:$PATH
+          CA=/home/runner/.mitmproxy/mitmproxy-ca-cert.pem
+          for i in $(seq 1 20); do [ -f $CA ] && break; sleep 3; done
           HASH=$(openssl x509 -subject_hash_old -in $CA -noout)
           adb push $CA /sdcard/$HASH.0
           adb shell "mount -o rw,remount / || mount -o rw,remount /system"
           adb shell "cp /sdcard/$HASH.0 /system/etc/security/cacerts/$HASH.0 && chmod 644 /system/etc/security/cacerts/$HASH.0"
           adb shell "settings put global http_proxy 10.0.2.2:8080"
-          adb shell getprop persist.sys.timezone
 
       - name: APK yükle + uygulamayı başlat
         run: |
-          export PATH=$HOME/android-sdk/platform-tools:$PATH
+          export PATH=$ANDROID_HOME/platform-tools:$PATH
           adb install-multiple -r apk/app.apk apk/split.apk || true
           sleep 5
           adb shell pm list packages | grep -i finans || true
@@ -99,24 +94,18 @@ jobs:
           adb exec-out screencap -p > screen2.png || true
           adb logcat -d > logcat.txt || true
           cp /tmp/mitm.log mitm.log || true
+          cp /tmp/emu.log emu.log || true
+          cp /tmp/flows.dump flows.dump 2>/dev/null || true
 
       - name: Login denemesi (opsiyonel)
         if: ${{ github.event.inputs.run_login == 'true' }}
         run: |
-          export PATH=$HOME/android-sdk/platform-tools:$PATH
-          # UI dump ile ekran bilgisini al (otomatik tıklama sonraki adımda)
+          export PATH=$ANDROID_HOME/platform-tools:$PATH
           adb shell uiautomator dump /sdcard/ui.xml || true
           adb pull /sdcard/ui.xml ui.xml || true
           sleep 120
           adb exec-out screencap -p > screen3.png || true
           adb logcat -d > logcat2.txt || true
-
-      - name: Trafik dump kaydet
-        if: always()
-        run: |
-          cp /tmp/flows.dump flows.dump 2>/dev/null || true
-          cp /tmp/emu.log emu.log 2>/dev/null || true
-          true
 
       - uses: actions/upload-artifact@v4
         if: always()
