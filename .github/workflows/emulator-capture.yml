@@ -35,8 +35,10 @@ jobs:
       - name: AVD oluştur
         run: |
           export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
-          echo no | avdmanager create avd -n qnb -k "system-images;android-33;google_apis_playstore;x86_64" -d pixel_5 --force
-          cat $HOME/.android/avd/qnb.avd/config.ini || true
+          mkdir -p /home/runner/.android/avd
+          echo no | avdmanager create avd -n qnb -p /home/runner/.android/avd/qnb -k "system-images;android-33;google_apis_playstore;x86_64" -d pixel_5 --force
+          ls -la /home/runner/.android/avd/
+          cat /home/runner/.android/avd/qnb.avd/config.ini || true
 
       - name: APK parçalarını birleştir
         run: |
