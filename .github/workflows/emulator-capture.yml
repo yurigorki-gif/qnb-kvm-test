@@ -57,10 +57,43 @@ jobs:
           sudo chmod 666 /dev/kvm || true
           ls -la /dev/kvm || echo "KVM yok"
           rm -rf /home/runner/.android/avd/qnb* 2>/dev/null || true
-          echo no | avdmanager create avd -n qnb -k "system-images;android-33;google_apis_playstore;x86_64" -d pixel_5 --force
+          echo no | avdmanager create avd -n qnb -k "system-images;android-33;google_apis_playstore;x86_64" -d pixel_5 --force || true
+          echo "=== avdmanager sonrasi ~/.android/avd ==="
+          ls -la /home/runner/.android/avd/ 2>/dev/null || echo "dizin yok"
+          # ini yoksa elle olustur (deterministik)
+          if [ ! -f /home/runner/.android/avd/qnb.ini ]; then
+            mkdir -p /home/runner/.android/avd/qnb.avd
+            cat > /home/runner/.android/avd/qnb.ini <<'INI'
+          avd.ini.encoding=UTF-8
+          path=/home/runner/.android/avd/qnb.avd
+          path.rel=avd/qnb.avd
+          target=android-33
+          INI
+            cat > /home/runner/.android/avd/qnb.avd/config.ini <<'CFG'
+          AvdId=qnb
+          PlayStore.enabled=true
+          abi.type=x86_64
+          hw.cpu.arch=x86_64
+          hw.cpu.ncore=4
+          hw.device.hash2=MD5:3274126e0242a0d86339850416b0ce34
+          hw.device.manufacturer=Google
+          hw.device.name=pixel_5
+          hw.keyboard=yes
+          hw.ramSize=3072
+          hw.lcd.density=420
+          hw.lcd.width=1080
+          hw.lcd.height=2340
+          image.sysdir.1=system-images/android-33/google_apis_playstore/x86_64/
+          tag.display=Google Play
+          tag.id=google_apis_playstore
+          disk.dataPartition.size=6G
+          fastboot.forceColdBoot=yes
+          CFG
+            echo "ini elle olusturuldu"
+          fi
           echo "=== AVD listesi ==="
           avdmanager list avd || true
-          find /home/runner/.android -maxdepth 3 -type f | head -10
+          ls -la /home/runner/.android/avd/ /home/runner/.android/avd/qnb.avd/ || true
           (mitmdump --set block_global=false --set termlog_verbosity=debug -w /tmp/flows.dump > /tmp/mitm.log 2>&1 &)
           sleep 5
           emulator -accel-check || true
