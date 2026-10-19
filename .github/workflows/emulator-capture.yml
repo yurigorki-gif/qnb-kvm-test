@@ -3,12 +3,12 @@ on:
   workflow_dispatch:
     inputs:
       run_login:
-        description: "Login denemesi yap (uiautomator ile)"
+        description: "Login denemesi (uiautomator)"
         default: "false"
 jobs:
   emulator:
-    runs-on: ubuntu-24.04-arm
-    timeout-minutes: 90
+    runs-on: ubuntu-latest   # x86_64 + /dev/kvm VAR
+    timeout-minutes: 75
     env:
       ANDROID_HOME: /home/runner/android-sdk
     steps:
@@ -18,33 +18,26 @@ jobs:
         run: |
           ls -la /dev/kvm || true
           sudo apt-get update -q
-          sudo apt-get install -y -q qemu-kvm cpu-checker
+          sudo apt-get install -y -q cpu-checker adb
           sudo kvm-ok || true
           sudo chmod 666 /dev/kvm || true
 
-      - name: SDK kurulum (debug)
+      - name: SDK kurulum
         run: |
-          set -x
           sudo apt-get install -y -q openjdk-17-jdk-headless unzip
           wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O /tmp/cmd.zip
           mkdir -p $ANDROID_HOME/cmdline-tools
           unzip -q /tmp/cmd.zip -d $ANDROID_HOME/cmdline-tools
           mv $ANDROID_HOME/cmdline-tools/cmdline-tools $ANDROID_HOME/cmdline-tools/latest
           export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
-          java -version
-          echo JAVA_HOME=$JAVA_HOME
-          yes | sdkmanager --licenses || true
-          echo "--- try normal ---"
-          sdkmanager --install "platform-tools" "emulator" "system-images;android-33;google_apis;arm64-v8a" || true
-          echo "--- try no_https ---"
-          sdkmanager --no_https --install "platform-tools" "emulator" "system-images;android-33;google_apis;arm64-v8a" || true
-          ls $ANDROID_HOME
-          [ -x $ANDROID_HOME/emulator/emulator ] && echo EMU_OK || echo EMU_MISSING
+          yes | sdkmanager --licenses > /dev/null 2>&1 || true
+          # google_apis_playstore x86_64: ARM (ndk_translation) içerir → arm64 APK çalışır
+          sdkmanager --install "platform-tools" "emulator" "system-images;android-33;google_apis_playstore;x86_64"
 
       - name: AVD oluştur
         run: |
-          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/emulator:$ANDROID_HOME/platform-tools:$PATH
-          echo no | avdmanager create avd -n qnb -k "system-images;android-33;google_apis;arm64-v8a" -d pixel_5 --force
+          export PATH=$ANDROID_HOME/cmdline-tools/latest/bin:$PATH
+          echo no | avdmanager create avd -n qnb -k "system-images;android-33;google_apis_playstore;x86_64" -d pixel_5 --force
 
       - name: APK parçalarını birleştir
         run: |
@@ -59,7 +52,6 @@ jobs:
       - name: Emulator başlat
         run: |
           export PATH=$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$PATH
-          mkdir -p /home/runner/.mitmproxy
           (mitmdump --set block_global=false --set termlog_verbosity=debug -w /tmp/flows.dump > /tmp/mitm.log 2>&1 &)
           sleep 5
           nohup emulator -avd qnb -no-window -no-audio -no-boot-anim \
@@ -87,6 +79,7 @@ jobs:
           adb shell "mount -o rw,remount / || mount -o rw,remount /system"
           adb shell "cp /sdcard/$HASH.0 /system/etc/security/cacerts/$HASH.0 && chmod 644 /system/etc/security/cacerts/$HASH.0"
           adb shell "settings put global http_proxy 10.0.2.2:8080"
+          adb shell getprop ro.product.cpu.abilist || true
 
       - name: APK yükle + uygulamayı başlat
         run: |
