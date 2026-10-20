@@ -1,0 +1,5 @@
+# Android fstab file - direct device paths (qemu virt)
+/dev/block/vda2   /system     ext4    ro,barrier=1     wait,first_stage_mount
+/dev/block/vde1   /vendor     ext4    ro,barrier=1     wait,first_stage_mount
+/dev/block/vdd1   /metadata   ext4    noatime,nosuid,nodev    wait,formattable,first_stage_mount
+/dev/block/vdc    /data       ext4    noatime,nosuid,nodev,nomblk_io_submit,errors=panic   wait,check,latemount
